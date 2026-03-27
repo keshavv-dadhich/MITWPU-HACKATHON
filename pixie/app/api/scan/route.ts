@@ -194,7 +194,7 @@ export async function POST(req: NextRequest) {
       // ── Scoring engine ────────────────────────────────────────────────────
       send({ worker: 'scoring', status: 'running', message: 'Calculating Digital Risk Score...' })
 
-      const aggregated = aggregateResults(
+      const aggregated = await aggregateResults(
         clean, hibp, sherlock, googleCSE, exif, hunter,
         intelx, spiderfoot, snov, skrapp, virustotal, phishing
       )

@@ -5,6 +5,7 @@ import type {
   ExifResult, HunterResult, VirusTotalResult, PhishingResult
 } from '@/lib/types'
 import type { IntelXResult, SpiderFootResult, SnovResult, SkrappResult } from '@/lib/workers/osint-extended'
+import { generateDynamicSummary } from './aiNarrative'
 
 // ─── PILLAR SCORING ───────────────────────────────────────────────────────────
 
@@ -286,22 +287,25 @@ function buildRemediations(
 
 // ─── ATTACK NARRATIVE ────────────────────────────────────────────────────────
 
-function buildNarrative(
+async function buildNarrative(
   identifier: string,
   pillars: FourPillars,
   drs: number,
   riskLevel: RiskLevel,
-): AttackNarrative {
+): Promise<AttackNarrative> {
   const breachCount = pillars.breachCredential.rawCount
   const platformCount = pillars.identitySurface.rawCount
   const hasGPS = pillars.identitySurface.findings.some(f => f.category === 'EXIF GPS Leak')
   const hasPwdReuse = pillars.breachCredential.findings.some(f => f.category === 'Credential Risk')
 
-  const summary = `Based on ${breachCount} confirmed breaches, ${platformCount} platform exposures, and ${pillars.linkability.rawCount} active pivot chains, a threat actor has sufficient data to execute credential stuffing, spear-phishing, and account takeover without any technical hacking skill.
-  
-${hasPwdReuse ? 'Password reuse confirmed across multiple breaches — every account using the same pattern is compromised the moment a single plaintext password is recovered. ' : ''}${hasGPS ? 'GPS metadata in public photos narrows your home address to within 50 meters. ' : ''}Data broker listings provide a complete personal dossier to anyone willing to pay $15.
+  const summary = await generateDynamicSummary(
+    identifier,
+    pillars,
+    drs,
+    riskLevel
+  )
 
-The total attack requires no hacking — only reading what is already publicly visible.`
+  console.log("Summary:", summary)
 
   const attackChain = [
     identifier,
@@ -322,7 +326,7 @@ The total attack requires no hacking — only reading what is already publicly v
 
 // ─── MAIN AGGREGATOR ─────────────────────────────────────────────────────────
 
-export function aggregateResults(
+export async function aggregateResults(
   identifier: string,
   hibp: HibpResult,
   sherlock: SherlockResult,
@@ -335,7 +339,7 @@ export function aggregateResults(
   skrapp?: SkrappResult,
   virustotal?: VirusTotalResult,
   phishing?: PhishingResult,
-): Omit<ScanResult, 'scanId' | 'identifierType' | 'status' | 'startedAt' | 'completedAt'> {
+): Promise<Omit<ScanResult, "scanId" | "identifierType" | "status" | "startedAt" | "completedAt">> {
   // Collect extra findings from extended workers, split by pillar
   const extP1: RawFinding[] = [
     ...(spiderfoot?.findings.filter(f => f.pillar === 1) || []),
@@ -398,7 +402,7 @@ export function aggregateResults(
     pivotNodes: buildPivotNodes(identifier, hibp, sherlock, exif),
     brokers: buildBrokers(),
     remediations: buildRemediations(pillars, drs),
-    narrative: buildNarrative(identifier, pillars, drs, riskLevel),
+    narrative: await buildNarrative(identifier, pillars, drs, riskLevel),
     allFindings,
   }
 }
