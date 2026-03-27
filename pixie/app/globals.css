@@ -1,0 +1,137 @@
+@import url('https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&family=Syne:wght@400;600;700;800&display=swap');
+@tailwind utilities;
+@import "tailwindcss";
+
+:root {
+  --bg: #080c10;
+  --bg2: #0d1219;
+  --bg3: #121820;
+  --surface: #161d27;
+  --sur2: #1c2533;
+  --border: #1e2d3d;
+  --bor2: #263547;
+  --text: #e8edf3;
+  --muted: #5a7a96;
+  --muted2: #3d5a75;
+  --cyan: #00d4ff;
+  --orange: #ff6b35;
+  --purple: #a855f7;
+  --green: #10b981;
+  --danger: #ff4757;
+  --warn: #ffa502;
+  --ok: #2ed573;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Syne', sans-serif;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9999;
+  background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0, 212, 255, .015) 2px, rgba(0, 212, 255, .015) 4px);
+}
+
+::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--bor2);
+  border-radius: 2px;
+}
+
+::selection {
+  background: rgba(0, 212, 255, .2);
+}
+
+@keyframes sweep {
+  0% {
+    left: -60%
+  }
+
+  100% {
+    left: 140%
+  }
+}
+
+@keyframes arcIn {
+  from {
+    stroke-dashoffset: 427
+  }
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(8px)
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0)
+  }
+}
+
+@keyframes barGrow {
+  from {
+    width: 0%
+  }
+}
+
+@keyframes pulseGlow {
+
+  0%,
+  100% {
+    opacity: 1
+  }
+
+  50% {
+    opacity: .4
+  }
+}
+
+.worker-sweep::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -60%;
+  width: 60%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(0, 212, 255, .08), transparent);
+  animation: sweep 1.2s infinite linear;
+}
+
+.drs-arc-animate {
+  animation: arcIn 1.8s cubic-bezier(.22, 1, .36, 1) forwards;
+}
+
+.animate-slide-up {
+  animation: slideUp .4s ease-out forwards;
+}
+
+.animate-pulse-glow {
+  animation: pulseGlow 2s infinite;
+}
