@@ -204,15 +204,15 @@ async function trySpiderFoot(identifier: string): Promise<SpiderFootResult | nul
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ scanname: `pixie-${Date.now()}`, scantarget: identifier, usecase: 'all' }),
-      signal: AbortSignal.timeout(3000),
+      signal: AbortSignal.timeout(6000),
     })
     if (!startRes.ok) return null
 
     const { scanId } = await startRes.json()
-    await new Promise(r => setTimeout(r, 3000))
+    await new Promise(r => setTimeout(r, 6000))
 
     const resultRes = await fetch(`http://localhost:5001/api/scan/${scanId}/results`, {
-      signal: AbortSignal.timeout(5000),
+      signal: AbortSignal.timeout(8000),
     })
     if (!resultRes.ok) return null
     const data = await resultRes.json()
