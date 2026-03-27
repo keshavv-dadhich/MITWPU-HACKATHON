@@ -17,67 +17,30 @@ function lcg(seed: number): number {
 
 // ─── PLATFORM DEFINITIONS ────────────────────────────────────────────────────
 
-type Category = PlatformMatch['category']
+const PLATFORMS: Array<Omit<PlatformMatch, 'confidence' | 'riskNote'> & { checkUrl: string; mode: 'live' | 'mock' }> = [
+  // ── Live checkable ──────────────────────────────────────────────────────────
+  { platform: 'GitHub',         url: 'https://github.com/{u}',                      checkUrl: 'https://github.com/{u}',                      category: 'developer', mode: 'live' },
+  { platform: 'GitLab',         url: 'https://gitlab.com/{u}',                      checkUrl: 'https://gitlab.com/{u}',                      category: 'developer', mode: 'live' },
+  { platform: 'Reddit',         url: 'https://reddit.com/user/{u}',                 checkUrl: 'https://www.reddit.com/user/{u}/about.json',   category: 'forum',     mode: 'live' },
+  { platform: 'HackerNews',     url: 'https://news.ycombinator.com/user?id={u}',    checkUrl: 'https://hacker-news.firebaseio.com/v0/user/{u}.json', category: 'forum', mode: 'live' },
+  { platform: 'Keybase',        url: 'https://keybase.io/{u}',                      checkUrl: 'https://keybase.io/{u}/lookup.json',           category: 'other',     mode: 'live' },
+  { platform: 'Dev.to',         url: 'https://dev.to/{u}',                          checkUrl: 'https://dev.to/api/users/by_username?url={u}', category: 'developer', mode: 'live' },
+  { platform: 'Medium',         url: 'https://medium.com/@{u}',                     checkUrl: 'https://medium.com/@{u}',                     category: 'forum',     mode: 'live' },
+  { platform: 'Replit',         url: 'https://replit.com/@{u}',                     checkUrl: 'https://replit.com/@{u}',                     category: 'developer', mode: 'live' },
+  { platform: 'Codepen',        url: 'https://codepen.io/{u}',                      checkUrl: 'https://codepen.io/{u}',                      category: 'developer', mode: 'live' },
 
-interface PlatformDef {
-  platform: string
-  url: string
-  category: Category
-  probeUrl?: string                                  // API endpoint to probe
-  probeCheck?: 'status' | 'json-not-null' | 'json-array' // how to interpret response
-}
-
-// Platforms with reliable public APIs for real HTTP probing
-const PROBEABLE: PlatformDef[] = [
-  {
-    platform: 'GitHub', url: 'https://github.com/{u}',
-    category: 'developer',
-    probeUrl: 'https://api.github.com/users/{u}',
-    probeCheck: 'status',
-  },
-  {
-    platform: 'GitLab', url: 'https://gitlab.com/{u}',
-    category: 'developer',
-    probeUrl: 'https://gitlab.com/api/v4/users?username={u}',
-    probeCheck: 'json-array',
-  },
-  {
-    platform: 'HackerNews', url: 'https://news.ycombinator.com/user?id={u}',
-    category: 'forum',
-    probeUrl: 'https://hacker-news.firebaseio.com/v0/user/{u}.json',
-    probeCheck: 'json-not-null',
-  },
-  {
-    platform: 'Dev.to', url: 'https://dev.to/{u}',
-    category: 'developer',
-    probeUrl: 'https://dev.to/api/users/by_username?url={u}',
-    probeCheck: 'status',
-  },
-  {
-    platform: 'Reddit', url: 'https://reddit.com/user/{u}',
-    category: 'forum',
-    probeUrl: 'https://www.reddit.com/user/{u}/about.json',
-    probeCheck: 'status',
-  },
+  // ── Bot-blocked — kept as mock (realistic hit rate) ─────────────────────────
+  { platform: 'Instagram',      url: 'https://instagram.com/{u}',                   checkUrl: '',  category: 'social',   mode: 'mock' },
+  { platform: 'Twitter/X',      url: 'https://twitter.com/{u}',                     checkUrl: '',  category: 'social',   mode: 'mock' },
+  { platform: 'LinkedIn',       url: 'https://linkedin.com/in/{u}',                 checkUrl: '',  category: 'social',   mode: 'mock' },
+  { platform: 'TikTok',         url: 'https://tiktok.com/@{u}',                     checkUrl: '',  category: 'social',   mode: 'mock' },
+  { platform: 'Twitch',         url: 'https://twitch.tv/{u}',                       checkUrl: '',  category: 'gaming',   mode: 'mock' },
+  { platform: 'Steam',          url: 'https://steamcommunity.com/id/{u}',           checkUrl: '',  category: 'gaming',   mode: 'mock' },
+  { platform: 'Pastebin',       url: 'https://pastebin.com/u/{u}',                  checkUrl: '',  category: 'other',    mode: 'mock' },
+  { platform: 'Stack Overflow', url: 'https://stackoverflow.com/users/{u}',         checkUrl: '',  category: 'developer',mode: 'mock' },
 ]
 
-// Platforms where server-side probing is unreliable — use deterministic sim
-const SIMULATED: PlatformDef[] = [
-  { platform: 'Twitter/X',      url: 'https://twitter.com/{u}',           category: 'social'    },
-  { platform: 'LinkedIn',       url: 'https://linkedin.com/in/{u}',       category: 'social'    },
-  { platform: 'Instagram',      url: 'https://instagram.com/{u}',         category: 'social'    },
-  { platform: 'Stack Overflow', url: 'https://stackoverflow.com/users/{u}', category: 'developer' },
-  { platform: 'Pastebin',       url: 'https://pastebin.com/u/{u}',        category: 'other'     },
-  { platform: 'Keybase',        url: 'https://keybase.io/{u}',            category: 'other'     },
-  { platform: 'Medium',         url: 'https://medium.com/@{u}',           category: 'forum'     },
-  { platform: 'Twitch',         url: 'https://twitch.tv/{u}',             category: 'gaming'    },
-  { platform: 'Steam',          url: 'https://steamcommunity.com/id/{u}', category: 'gaming'    },
-  { platform: 'Gravatar',       url: 'https://gravatar.com/{u}',          category: 'other'     },
-  { platform: 'Codepen',        url: 'https://codepen.io/{u}',            category: 'developer' },
-  { platform: 'Replit',         url: 'https://replit.com/@{u}',           category: 'developer' },
-]
-
-const RISK_NOTES: Record<Category, string> = {
+const RISK_NOTES: Record<PlatformMatch['category'], string> = {
   social:    'Social profiles reveal location, network, and personal history',
   developer: 'Code repositories may expose API keys, emails, and employer info',
   forum:     'Post history reveals political views, location, and personal details',
@@ -104,99 +67,85 @@ async function tryDockerSherlock(username: string): Promise<PlatformMatch[] | nu
     const data = await res.json()
     if (!Array.isArray(data) || data.length === 0) return null
 
-    return data.map((hit: { site: string; url: string; status: string }) => ({
-      platform: hit.site,
-      url: hit.url,
-      category: categorize(hit.site),
-      confidence: 'high' as const,
-      riskNote: RISK_NOTES[categorize(hit.site)],
-    }))
+    return data.map((hit: { site: string; url: string; status: string }) => {
+      const pMatch = PLATFORMS.find(p => p.platform.toLowerCase() === hit.site.toLowerCase())
+      const category = pMatch ? pMatch.category : 'other'
+      return {
+        platform: hit.site,
+        url: hit.url,
+        category,
+        confidence: 'high' as const,
+        riskNote: RISK_NOTES[category] || RISK_NOTES['other'],
+      }
+    })
   } catch {
     return null // Docker not running — fall through
   }
 }
 
-function categorize(site: string): Category {
-  const s = site.toLowerCase()
-  if (['github', 'gitlab', 'stackoverflow', 'codepen', 'replit', 'dev.to', 'bitbucket'].some(k => s.includes(k))) return 'developer'
-  if (['twitter', 'linkedin', 'instagram', 'facebook', 'tiktok', 'snapchat'].some(k => s.includes(k))) return 'social'
-  if (['reddit', 'medium', 'hackernews', 'quora'].some(k => s.includes(k))) return 'forum'
-  if (['steam', 'twitch', 'xbox', 'playstation'].some(k => s.includes(k))) return 'gaming'
-  return 'other'
-}
+// ─── TIER 2: HTTP PROBING (FRIEND'S CODE) ────────────────────────────────────
 
-// ─── TIER 2: HTTP PROBING ────────────────────────────────────────────────────
+async function checkPlatform(
+  platform: typeof PLATFORMS[number],
+  username: string,
+): Promise<boolean> {
+  if (platform.mode !== 'live') return false
+  const url = platform.checkUrl.replace(/{u}/g, username)
 
-async function probeOnePlatform(def: PlatformDef, username: string): Promise<PlatformMatch | null> {
-  if (!def.probeUrl) return null
-  const url = def.probeUrl.replace('{u}', encodeURIComponent(username))
   try {
-    const controller = new AbortController()
-    const timer = setTimeout(() => controller.abort(), 4000)
     const res = await fetch(url, {
-      signal: controller.signal,
+      method: platform.platform === 'HackerNews' || platform.platform === 'Dev.to' ? 'GET' : 'HEAD',
       headers: {
-        'User-Agent': 'PIXIE-OSINT-Scanner/1.0',
-        'Accept': 'application/json',
+        'User-Agent': 'Mozilla/5.0 (compatible; PIXIE-OSINT/1.0)',
       },
+      redirect: 'follow',
+      signal: AbortSignal.timeout(5000),
     })
-    clearTimeout(timer)
 
-    if (def.probeCheck === 'status') {
-      if (res.status === 200) {
-        return {
-          platform: def.platform,
-          url: def.url.replace('{u}', username),
-          category: def.category,
-          confidence: 'high',
-          riskNote: RISK_NOTES[def.category],
-        }
-      }
-      return null // 404 or other = not found
-    }
-
-    if (def.probeCheck === 'json-not-null') {
+    if (platform.platform === 'HackerNews') {
       const text = await res.text()
-      if (text && text !== 'null') {
-        return {
-          platform: def.platform,
-          url: def.url.replace('{u}', username),
-          category: def.category,
-          confidence: 'high',
-          riskNote: RISK_NOTES[def.category],
-        }
-      }
-      return null
+      return text !== 'null' && text.trim() !== ''
     }
 
-    if (def.probeCheck === 'json-array') {
-      const arr = await res.json()
-      if (Array.isArray(arr) && arr.length > 0) {
-        return {
-          platform: def.platform,
-          url: def.url.replace('{u}', username),
-          category: def.category,
-          confidence: 'high',
-          riskNote: RISK_NOTES[def.category],
-        }
-      }
-      return null
+    if (platform.platform === 'Dev.to') {
+      return res.status === 200
     }
 
-    return null
+    if (platform.platform === 'Reddit') {
+      return res.status === 200
+    }
+
+    if (platform.platform === 'Keybase') {
+      return res.status === 200
+    }
+
+    return res.status === 200
   } catch {
-    return null // timeout or network error
+    return false
   }
 }
 
 async function httpProbe(username: string): Promise<PlatformMatch[]> {
-  const results = await Promise.allSettled(
-    PROBEABLE.map(p => probeOnePlatform(p, username))
+  const livePlatforms = PLATFORMS.filter(p => p.mode === 'live')
+  const liveResults = await Promise.all(
+    livePlatforms.map(async p => {
+      const exists = await checkPlatform(p, username)
+      return { platform: p, exists }
+    })
   )
-  return results
-    .filter((r): r is PromiseFulfilledResult<PlatformMatch | null> => r.status === 'fulfilled')
-    .map(r => r.value)
-    .filter((m): m is PlatformMatch => m !== null)
+
+  const matches: PlatformMatch[] = []
+  for (const { platform: p, exists } of liveResults) {
+    if (!exists) continue
+    matches.push({
+      platform: p.platform,
+      url: p.url.replace(/{u}/g, username),
+      category: p.category,
+      confidence: 'high',
+      riskNote: RISK_NOTES[p.category],
+    })
+  }
+  return matches
 }
 
 // ─── TIER 3: DETERMINISTIC SIMULATION ────────────────────────────────────────
@@ -204,7 +153,8 @@ async function httpProbe(username: string): Promise<PlatformMatch[]> {
 function deterministicSim(username: string): PlatformMatch[] {
   const seed = seedFromString(username)
   const count = 3 + (seed % 5) // select 3-7 simulated platforms
-  const pool = [...SIMULATED]
+  const mockPlatforms = PLATFORMS.filter(p => p.mode === 'mock')
+  const pool = [...mockPlatforms]
   const selected: PlatformMatch[] = []
   let s = seed
   for (let i = 0; i < count && pool.length > 0; i++) {
@@ -214,7 +164,7 @@ function deterministicSim(username: string): PlatformMatch[] {
     const conf = s % 3 === 0 ? 'high' : s % 3 === 1 ? 'medium' : 'low'
     selected.push({
       platform: def.platform,
-      url: def.url.replace('{u}', username),
+      url: def.url.replace(/{u}/g, username),
       category: def.category,
       confidence: conf as 'high' | 'medium' | 'low',
       riskNote: RISK_NOTES[def.category],
@@ -234,36 +184,36 @@ function getMatchSeverity(match: PlatformMatch): RawFinding['severity'] {
 }
 
 // ─── MAIN WORKER ─────────────────────────────────────────────────────────────
-// Tier 1: Try Docker Sherlock container
-// Tier 2: HTTP probe platforms with reliable APIs (GitHub, GitLab, HN, Dev.to, Reddit)
-// Tier 3: Deterministic simulation for remaining platforms
-// Results from all tiers are merged.
 
-export async function runSherlockWorker(identifier: string): Promise<SherlockResult> {
+export async function runSherlockWorker(identifier: string): Promise<SherlockResult & { confirmedUsername: string }> {
   const username = identifier.includes('@')
     ? identifier.split('@')[0].replace(/[^a-zA-Z0-9._-]/g, '')
     : identifier
 
   let matches: PlatformMatch[] = []
 
-  // Tier 1 — Docker Sherlock (comprehensive, if running)
+  // Tier 1 — Docker Sherlock
   const dockerResult = await tryDockerSherlock(username)
   if (dockerResult && dockerResult.length > 0) {
     matches = dockerResult
   } else {
-    // Tier 2 — Real HTTP probing for platforms with public APIs
+    // Tier 2 — Real HTTP probing
     const probed = await httpProbe(username)
 
-    // Tier 3 — Deterministic simulation for remaining platforms
+    // Tier 3 — Deterministic simulation
     const simulated = deterministicSim(username)
 
-    // Merge: probed (real) + simulated, avoiding duplicate platforms
     const probedNames = new Set(probed.map(p => p.platform))
     const filteredSim = simulated.filter(s => !probedNames.has(s.platform))
     matches = [...probed, ...filteredSim]
   }
 
-  // Build findings
+  // Extract confirmed username
+  const confirmedUsername = matches.find(m => m.confidence === 'high')
+    ?.url.split('/').filter(Boolean).pop()
+    ?.replace(/^@/, '')
+    ?? username
+
   const findings: RawFinding[] = matches.map((m, i) => ({
     id: `sherlock-${i}`,
     pillar: 1 as const,
@@ -275,7 +225,6 @@ export async function runSherlockWorker(identifier: string): Promise<SherlockRes
     metadata: { match: m },
   }))
 
-  // Aggregate category risk
   const categories = [...new Set(matches.map(m => m.category))]
   if (categories.length >= 4) {
     findings.push({
@@ -290,5 +239,5 @@ export async function runSherlockWorker(identifier: string): Promise<SherlockRes
     })
   }
 
-  return { status: 'done', matches, findings }
+  return { status: 'done', matches, findings, confirmedUsername }
 }
