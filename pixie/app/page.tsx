@@ -3,7 +3,10 @@
 import { useState, useCallback } from 'react'
 import type { ScanResult, WorkerStatus, WorkerEvent } from '@/lib/types'
 import { DRSRing } from '@/components/DRSRing'
-import { LinkMap } from '@/components/LinkMap'
+import { ThreatGraph } from '@/components/ThreatGraph'
+import { CinematicLoader } from '@/components/CinematicLoader'
+import { BreachTimeline } from '@/components/BreachTimeline'
+import { PlatformDonut } from '@/components/PlatformDonut'
 import {
   Badge, Card, CardHeader, SectionHead,
   PillarCard, FindingItem, RemedItem, WorkerCard
@@ -78,50 +81,7 @@ function LandingPage({ onScan }: { onScan: (id: string) => void }) {
   )
 }
 
-// ─── LOADING ──────────────────────────────────────────────────────────────────
-
-function LoadingScreen({ workers, progress, currentStep }: { workers: Workers; progress: number; currentStep: string }) {
-  const defs = [
-    { id: 'hibp', name: 'Worker A — HIBP breach lookup' },
-    { id: 'sherlock', name: 'Worker B — Platform enumeration' },
-    { id: 'googleCSE', name: 'Worker C — Web presence scan' },
-    { id: 'exif', name: 'Worker D — Photo metadata' },
-    { id: 'hunter', name: 'Worker E — Identity enrichment' },
-    { id: 'intelx', name: 'Worker F — Dark web search' },
-    { id: 'spiderfoot', name: 'Worker G — OSINT aggregation' },
-    { id: 'snov', name: 'Worker H — Email profiling' },
-    { id: 'skrapp', name: 'Worker I — LinkedIn extraction' },
-    { id: 'virustotal', name: 'Worker J — Threat Intel & Rep' },
-    { id: 'phishing', name: 'Worker K — Phishing heuristics' },
-  ] as const
-
-  const col = (s: WorkerStatus) =>
-    s === 'done' ? 'var(--ok)' : s === 'running' ? 'var(--cyan)' : 'var(--muted2)'
-
-  return (
-    <div className="min-h-screen flex flex-col items-center justify-center gap-8" style={{ background: 'var(--bg)' }}>
-      <div className="text-3xl font-extrabold tracking-[.1em]">PIX<span style={{ color: 'var(--cyan)' }}>IE</span></div>
-      <div className="flex flex-col gap-3 w-80">
-        {defs.map(w => {
-          const ws = workers[w.id]
-          return (
-            <div key={w.id} className="flex items-center gap-3 font-mono text-xs">
-              <div className="w-2 h-2 rounded-full flex-shrink-0 animate-pulse-glow" style={{ background: col(ws.status) }} />
-              <span className="flex-1" style={{ color: ws.status !== 'idle' ? 'var(--text)' : 'var(--muted)' }}>{w.name}</span>
-              <span style={{ color: col(ws.status) }}>{ws.status === 'done' ? ws.count : ws.status === 'running' ? '…' : ''}</span>
-            </div>
-          )
-        })}
-      </div>
-      <div className="w-80">
-        <div className="h-0.5 rounded-full overflow-hidden" style={{ background: 'var(--sur2)' }}>
-          <div className="h-full rounded-full transition-all duration-500" style={{ width: `${progress}%`, background: 'var(--cyan)' }} />
-        </div>
-        <div className="font-mono text-[11px] mt-2 text-center" style={{ color: 'var(--muted)' }}>{currentStep}</div>
-      </div>
-    </div>
-  )
-}
+// ─── LOADING — replaced by CinematicLoader component ─────────────────────────
 
 // ─── DASHBOARD ────────────────────────────────────────────────────────────────
 
@@ -134,6 +94,73 @@ function Dashboard({ result, onRescan }: { result: ScanResult; onRescan: () => v
     result.riskLevel === 'CRITICAL' ? 'var(--danger)' :
       result.riskLevel === 'HIGH' ? 'var(--warn)' :
         result.riskLevel === 'MODERATE' ? 'var(--cyan)' : 'var(--ok)'
+
+  const exportToPDF = async () => {
+    const { default: html2canvas } = await import('html2canvas')
+    const { default: jsPDF } = await import('jspdf')
+
+    const el = document.getElementById('dashboard-content')
+    if (!el) return
+
+    // Capture the FULL element — not just the visible viewport
+    const canvas = await html2canvas(el, {
+      backgroundColor: '#080c10',
+      scale: 1.5,
+      useCORS: true,
+      logging: false,
+      width: el.scrollWidth,
+      height: el.scrollHeight,
+      windowWidth: el.scrollWidth,
+      windowHeight: el.scrollHeight,
+    })
+
+    const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
+    const pageW = pdf.internal.pageSize.getWidth()   // 210 mm
+    const pageH = pdf.internal.pageSize.getHeight()  // 297 mm
+    const HEADER_H = 22  // mm reserved for branding header on each page
+    const contentPageH = pageH - HEADER_H
+
+    // How many PDF mm per canvas pixel (width axis)
+    const mmPerPx = pageW / canvas.width
+    // How many canvas pixels fit in one content page height
+    const contentPagePx = Math.floor(contentPageH / mmPerPx)
+
+    const totalPages = Math.ceil(canvas.height / contentPagePx)
+
+    for (let page = 0; page < totalPages; page++) {
+      if (page > 0) pdf.addPage()
+
+      // ── Header bar ────────────────────────────────────────────
+      pdf.setFillColor(13, 18, 25)
+      pdf.rect(0, 0, pageW, HEADER_H, 'F')
+      pdf.setFont('helvetica', 'bold')
+      pdf.setFontSize(10)
+      pdf.setTextColor(0, 212, 255)
+      pdf.text('PIXIE — PERSONAL PRIVACY INTELLIGENCE ENGINE', 8, 10)
+      pdf.setFontSize(7)
+      pdf.setTextColor(90, 122, 150)
+      pdf.text(
+        `Target: ${result.identifier}  |  Risk: ${result.riskLevel}  |  DRS: ${result.drs}/100  |  Page ${page + 1}/${totalPages}`,
+        8, 17,
+      )
+
+      // ── Slice the master canvas for this page ─────────────────
+      const srcY = page * contentPagePx
+      const srcH = Math.min(contentPagePx, canvas.height - srcY)
+
+      const sliceCanvas = document.createElement('canvas')
+      sliceCanvas.width = canvas.width
+      sliceCanvas.height = srcH
+      const ctx = sliceCanvas.getContext('2d')!
+      ctx.drawImage(canvas, 0, srcY, canvas.width, srcH, 0, 0, canvas.width, srcH)
+
+      const sliceImg = sliceCanvas.toDataURL('image/jpeg', 0.92)
+      const sliceRenderedH = (srcH / canvas.width) * pageW
+      pdf.addImage(sliceImg, 'JPEG', 0, HEADER_H, pageW, sliceRenderedH, '', 'FAST')
+    }
+
+    pdf.save(`PIXIE-Report-${result.identifier.replace(/[@.]/g, '_')}-${new Date().toISOString().slice(0, 10)}.pdf`)
+  }
 
   return (
     <div className="flex min-h-screen" style={{ background: 'var(--bg)' }}>
@@ -212,8 +239,17 @@ function Dashboard({ result, onRescan }: { result: ScanResult; onRescan: () => v
             <span className="font-mono text-[11px]" style={{ color: 'var(--muted)' }}>{result.scanId}</span>
             <Badge color={riskColor}>{result.riskLevel} RISK</Badge>
             <Badge color="var(--muted)">{result.allFindings.length} FINDINGS</Badge>
+            <button
+              onClick={exportToPDF}
+              className="flex items-center gap-1.5 font-mono text-[10px] font-bold px-3 py-1.5 rounded-md border transition-all hover:opacity-80 active:scale-95"
+              style={{ color: 'var(--cyan)', borderColor: 'var(--cyan)44', background: 'var(--cyan)0f' }}
+            >
+              ↓ PDF
+            </button>
           </div>
         </div>
+
+        <div id="dashboard-content">
 
         {/* ── OVERVIEW ─────────────────────────────────────────── */}
         <div id="sec-overview">
@@ -298,7 +334,8 @@ function Dashboard({ result, onRescan }: { result: ScanResult; onRescan: () => v
                 <h3 className="text-xs font-bold tracking-wider" style={{ color: 'var(--orange)' }}>DATA BREACHES</h3>
                 <Badge color="var(--orange)">{result.hibp.breaches.length} found</Badge>
               </CardHeader>
-              <div className="max-h-80 overflow-y-auto">
+              <BreachTimeline breaches={result.hibp.breaches} />
+              <div className="max-h-64 overflow-y-auto">
                 {result.pillars.breachCredential.findings.filter(f => f.category === 'Data Breach').map(f => (
                   <FindingItem key={f.id} title={f.title} description={f.description} severity={f.severity} tag={f.category} source={f.source} />
                 ))}
@@ -321,6 +358,16 @@ function Dashboard({ result, onRescan }: { result: ScanResult; onRescan: () => v
         {/* ── IDENTITY ─────────────────────────────────────────── */}
         <div id="sec-identity">
           <SectionHead title="Identity Surface Area" tag="PILLAR 1" color="var(--cyan)" />
+
+          {/* Donut chart full-width card above the 2-col grid */}
+          <Card className="mb-4">
+            <CardHeader>
+              <h3 className="text-xs font-bold tracking-wider" style={{ color: 'var(--cyan)' }}>PLATFORM DISTRIBUTION</h3>
+              <Badge color="var(--cyan)">{result.sherlock.matches.length} platforms across {[...new Set(result.sherlock.matches.map(m => m.category))].length} categories</Badge>
+            </CardHeader>
+            <PlatformDonut matches={result.sherlock.matches} />
+          </Card>
+
           <div className="grid grid-cols-2 gap-4 mb-6">
             <Card>
               <CardHeader>
@@ -363,7 +410,7 @@ function Dashboard({ result, onRescan }: { result: ScanResult; onRescan: () => v
               <p className="font-mono text-[11px] mb-4" style={{ color: 'var(--muted)' }}>
                 Hover each node to see how a threat actor chains exposed fragments into a full attack.
               </p>
-              <LinkMap nodes={result.pivotNodes} />
+              <ThreatGraph nodes={result.pivotNodes} />
               <div className="mt-4 grid grid-cols-1 gap-2">
                 {result.pillars.linkability.findings.map(f => (
                   <FindingItem key={f.id} title={f.title} description={f.description} severity={f.severity} tag={f.category} source={f.source} />
@@ -440,6 +487,8 @@ function Dashboard({ result, onRescan }: { result: ScanResult; onRescan: () => v
             ))}
           </Card>
         </div>
+
+        </div> {/* end #dashboard-content */}
 
       </main>
     </div>
@@ -528,7 +577,7 @@ export default function Page() {
   }, [setWorker])
 
   if (phase === 'landing') return <LandingPage onScan={runScan} />
-  if (phase === 'loading') return <LoadingScreen workers={workers} progress={progress} currentStep={currentStep} />
+  if (phase === 'loading') return <CinematicLoader workers={workers} progress={progress} />
   if (phase === 'result' && result) return <Dashboard result={result} onRescan={() => setPhase('landing')} />
   return null
 }
